@@ -49,7 +49,7 @@ def on_select_scenario(selection: str):
     )
 
 
-def run_autonomous_arena(scenario_selection: str):
+def run_autonomous_arena(scenario_selection: str, user_api_key: str = ""):
     """Executes the autonomous agent loop and streams reasoning + terminal logs in real time."""
     if not scenario_selection:
         yield "Please select a scenario.", "", "", "❌ Error"
@@ -61,11 +61,17 @@ def run_autonomous_arena(scenario_selection: str):
         yield "Scenario not found.", "", "", "❌ Error"
         return
 
-    if not os.environ.get("REFLECTION_API_KEY"):
-        yield "REFLECTION_API_KEY secret not found in Space settings.", "", "", "❌ Missing API Key"
+    active_key = (user_api_key or "").strip() or os.environ.get("REFLECTION_API_KEY", "").strip()
+    if not active_key:
+        yield (
+            "⚠️ No REFLECTION_API_KEY available.\n\nPlease enter your Reflection AI API key in the 'Reflection API Key' box above or configure it as a secret in Space Settings.",
+            "Execution halted: Missing API credentials.",
+            "No modifications made.",
+            "❌ Missing API Key"
+        )
         return
 
-    client = BeamClient()
+    client = BeamClient(api_key=active_key)
     agent = AutonomousCodingAgent(client=client, max_turns=3)
 
     reasoning_log = []
@@ -243,6 +249,12 @@ with gr.Blocks(title="BeamArena — Autonomous Coding Gym") as demo:
                     )
                     description_box = gr.Textbox(label="Problem Description", lines=2, interactive=False)
                     test_cmd_box = gr.Textbox(label="Verification Test Command", interactive=False)
+                    api_key_box = gr.Textbox(
+                        label="Reflection API Key (Optional)",
+                        placeholder="Leave blank to use pre-configured Space secret",
+                        type="password",
+                        lines=1,
+                    )
                     run_btn = gr.Button("🚀 Launch Beam Autonomous Loop", variant="primary", size="lg")
                     status_badge = gr.Textbox(label="Run Status", value="Idle", elem_classes=["status-box"])
 
@@ -277,7 +289,7 @@ with gr.Blocks(title="BeamArena — Autonomous Coding Gym") as demo:
             # Wire run button
             run_btn.click(
                 fn=run_autonomous_arena,
-                inputs=[scenario_dropdown],
+                inputs=[scenario_dropdown, api_key_box],
                 outputs=[reasoning_view, terminal_view, diff_view, status_badge]
             )
 
