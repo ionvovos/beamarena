@@ -1,0 +1,62 @@
+{
+  "benchmark_title": "Beam-1.0-501B-A23B 1M-Context SWE Reasoning Frontier",
+  "benchmark_date": "2026-10-22T18:42:00+03:00",
+  "model": "Beam-1.0-501B-A23B",
+  "evaluations": [
+    {
+      "tier": "10K",
+      "label": "Module Tier",
+      "input_tokens": 9138,
+      "reasoning_tokens": 198,
+      "total_tokens": 9409,
+      "latency_seconds": 2.54,
+      "needle_found": true,
+      "resolved": true,
+      "status": "\u2705 RESOLVED"
+    },
+    {
+      "tier": "50K",
+      "label": "Package Tier",
+      "input_tokens": 49077,
+      "reasoning_tokens": 53,
+      "total_tokens": 47428,
+      "latency_seconds": 2.17,
+      "needle_found": true,
+      "resolved": true,
+      "status": "\u2705 RESOLVED"
+    },
+    {
+      "tier": "150K",
+      "label": "Subsystem Tier",
+      "input_tokens": 149314,
+      "reasoning_tokens": 1874,
+      "total_tokens": 139761,
+      "latency_seconds": 8.35,
+      "needle_found": true,
+      "resolved": true,
+      "status": "\u2705 RESOLVED"
+    },
+    {
+      "tier": "500K",
+      "label": "Multi-Package Tier",
+      "input_tokens": 500275,
+      "reasoning_tokens": 1999,
+      "total_tokens": 467432,
+      "latency_seconds": 26.88,
+      "needle_found": true,
+      "resolved": false,
+      "status": "\u274c FAILED"
+    },
+    {
+      "tier": "1M",
+      "label": "1M Frontier Tier",
+      "input_tokens": 1001135,
+      "reasoning_tokens": 896,
+      "total_tokens": 923034,
+      "latency_seconds": 28.8,
+      "needle_found": true,
+      "resolved": true,
+      "status": "\u2705 RESOLVED"
+    }
+  ]
+}

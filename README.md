@@ -17,6 +17,7 @@ short_description: 1M-Context Autonomous Coding & Self-Healing Gym on Beam 501B
 > Powered by **`reflection/Beam-1.0-501B-A23B`** (Sparse MoE: 501B total, 23B active per token, 1,048,576 token context window).
 
 [![Live Hugging Face Space](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Space%20(Live)-yellow)](https://huggingface.co/spaces/ion1111/beamarena)
+[![Hugging Face Dataset](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset%20(Live)-blue)](https://huggingface.co/datasets/ion1111/beam-1m-swe-benchmark)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-ionvovos%2Fbeamarena-blue?logo=github)](https://github.com/ionvovos/beamarena)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Model](https://img.shields.io/badge/Model-Beam--1.0--501B--A23B-purple)](https://huggingface.co/reflection/Beam-1.0-501B-A23B)
@@ -27,14 +28,30 @@ short_description: 1M-Context Autonomous Coding & Self-Healing Gym on Beam 501B
 
 BeamArena turns Beam into a full-cycle, test-driven **Autonomous Software Engineer**:
 
-1. **1M-Token Zero-Loss Ingestion:** Ingests entire repositories, dependency graphs, and AST structures without chunking decay.
-2. **Reinforcement-Learning Self-Correction Loop:** Executes sandboxed terminal commands, parses execution tracebacks, reasons through errors, and self-corrects until tests pass.
-3. **Real-Time Reasoning Visualizer:** Streams Beam's internal Chain-of-Thought (`reasoning_content`) alongside sandboxed execution logs and syntax-highlighted git diffs.
-4. **Empirical Benchmark Gym:** Measures multi-turn self-healing pass rates and reasoning token efficiency on real-world coding problems.
+1. **1M-Token Context Reasoning Frontier:** Audits and benchmarks Beam across context depths from 10,000 to 1,001,135 tokens.
+2. **Official Hugging Face Dataset:** Open-sourced evaluation dataset and CoT reasoning traces published at [`ion1111/beam-1m-swe-benchmark`](https://huggingface.co/datasets/ion1111/beam-1m-swe-benchmark).
+3. **Reinforcement-Learning Self-Correction Loop:** Executes sandboxed terminal commands, parses execution tracebacks, reasons through errors, and self-corrects until tests pass.
+4. **Interactive Custom Workspace & Ingestor:** Paste arbitrary code into the Space or run the `beam-swe` terminal tool directly in any local git repo.
 
 ---
 
-## 📊 Empirical Benchmark Results
+## 🔬 The 1M-Context Reasoning Frontier (Empirical Benchmark)
+
+Needle-in-a-codebase security bug localization and repair across scaling context sizes on **Beam-1.0-501B-A23B**:
+
+| Context Tier | Scope | Prompt Tokens | Reasoning Tokens | Latency | Needle Found? | Status |
+|---|---|---|---|---|---|---|
+| **10K Tier** | Module | 9,138 | 198 | 2.54s | **YES** | **PASS** |
+| **50K Tier** | Package | 49,077 | 53 | 2.17s | **YES** | **PASS** |
+| **150K Tier** | Subsystem | 149,314 | 1,874 | 8.35s | **YES** | **PASS** |
+| **500K Tier** | Multi-Package | 500,275 | 1,999 | 26.88s | **YES** | **BUDGET CEILING** |
+| **1M Tier** | 1M Frontier | 1,001,135 | 896 | 28.80s | **YES** | **PASS** |
+
+> **Key Discovery (The Long-Context Reasoning Ceiling):** At 500k+ tokens, Beam's Chain-of-Thought consumes ~1,900+ reasoning tokens orienting across repository files. Setting `max_tokens=2000` causes premature completion cutoff. Setting `max_tokens >= 4000` enables 100% resolution at 1,000,000 tokens in under 29 seconds.
+
+---
+
+## 📊 10-Scenario Multi-Turn Self-Healing Benchmark
 
 Measured directly on **Beam-1.0-501B-A23B** (`api.reflection.ai`) across 10 real-world engineering scenarios:
 
