@@ -153,7 +153,7 @@ custom_css = """
 .terminal-box { font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; }
 """
 
-with gr.Blocks(title="BeamArena — Autonomous Coding Gym", css=custom_css, theme=gr.themes.Soft()) as demo:
+with gr.Blocks(title="BeamArena — Autonomous Coding Gym") as demo:
     gr.Markdown(
         """
         # ⚡ BeamArena
@@ -196,7 +196,7 @@ with gr.Blocks(title="BeamArena — Autonomous Coding Gym", css=custom_css, them
                     )
 
             with gr.Row():
-                diff_view = gr.Code(label="🔍 Generated Patch (Unified Git Diff)", language="diff", lines=10)
+                diff_view = gr.Code(label="🔍 Generated Patch (Unified Git Diff)", lines=10)
 
             # Wire scenario dropdown change
             scenario_dropdown.change(
@@ -270,5 +270,4 @@ with gr.Blocks(title="BeamArena — Autonomous Coding Gym", css=custom_css, them
 
 
 if __name__ == "__main__":
-    # Pre-populate on launch
-    demo.queue().launch()
+    demo.queue().launch(css=custom_css, theme=gr.themes.Soft())
