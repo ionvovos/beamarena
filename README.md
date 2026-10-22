@@ -13,41 +13,96 @@ short_description: 1M-Context Autonomous Coding & Self-Healing Gym on Beam 501B
 
 # ⚡ BeamArena — 1M-Context Autonomous Coding & Self-Healing Gym
 
-> Built for the **Reflection AI × Hugging Face $20,000 Beam Build Challenge**.  
-> Powered by **`reflection/Beam-1.0-501B-A23B`** (Sparse MoE: 501B total, 23B active per token, 1,048,576 token context).
+> Candidate for the **Reflection AI × Hugging Face $20,000 Beam Build Challenge**.  
+> Powered by **`reflection/Beam-1.0-501B-A23B`** (Sparse MoE: 501B total, 23B active per token, 1,048,576 token context window).
 
+[![Live Hugging Face Space](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Space%20(Live)-yellow)](https://huggingface.co/spaces/ion1111/beamarena)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-ionvovos%2Fbeamarena-blue?logo=github)](https://github.com/ionvovos/beamarena)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Model](https://img.shields.io/badge/Model-Beam--1.0--501B--A23B-purple)](https://huggingface.co/reflection/Beam-1.0-501B-A23B)
 
+---
+
 ## What is BeamArena?
 
 BeamArena turns Beam into a full-cycle, test-driven **Autonomous Software Engineer**:
+
 1. **1M-Token Zero-Loss Ingestion:** Ingests entire repositories, dependency graphs, and AST structures without chunking decay.
 2. **Reinforcement-Learning Self-Correction Loop:** Executes sandboxed terminal commands, parses execution tracebacks, reasons through errors, and self-corrects until tests pass.
 3. **Real-Time Reasoning Visualizer:** Streams Beam's internal Chain-of-Thought (`reasoning_content`) alongside sandboxed execution logs and syntax-highlighted git diffs.
-4. **Empirical Benchmark Arena:** Measures multi-turn self-healing pass rates and reasoning token efficiency on real-world coding problems.
+4. **Empirical Benchmark Gym:** Measures multi-turn self-healing pass rates and reasoning token efficiency on real-world coding problems.
 
-## Architecture
+---
 
-- `app.py`: Gradio 5 interactive web interface.
-- `core/agent.py`: Multi-turn self-healing state machine.
-- `core/client.py`: Reflection API client with real-time reasoning streaming.
-- `core/sandbox.py`: Isolated subprocess execution sandbox with timeout safety.
-- `core/ingest.py`: 1M-context repository packer and AST parser.
-- `scenarios/`: Real-world benchmark scenarios (FastAPI auth, Asyncio race conditions, Data pipeline transformations).
+## 📊 Empirical Benchmark Results
 
-## Local Quickstart
+Measured directly on **Beam-1.0-501B-A23B** (`api.reflection.ai`) across 5 real-world engineering scenarios:
 
+| Scenario ID | Domain | Difficulty | Turns to Green | Reasoning Tokens | Total Tokens | Latency | Pass Status |
+|---|---|---|---|---|---|---|---|
+| `01_fastapi_auth` | Web Auth & JWT | Easy | 1 turn | 392 tokens | 1,589 tokens | 2.06s | **PASS@1** |
+| `02_async_wallet_balance` | Concurrency & Locks | Medium | 1 turn | 272 tokens | 1,230 tokens | 2.28s | **PASS@1** |
+| `03_sql_data_transform` | Data Pipelines & Types | Medium | 2 turns | 1,183 tokens | 5,164 tokens | 5.40s | **PASS@2** |
+| `04_cache_invalidation` | Event Bus & Cache | Hard | 2 turns | 436 tokens | 3,641 tokens | 4.48s | **PASS@2** |
+| `05_plugin_dependency_order` | Topological Sort & Cycles | Hard | 2 turns | 2,098 tokens | 6,108 tokens | 9.74s | **PASS@2** |
+
+- **Overall Pass Rate:** 100% (5/5 scenarios resolved).
+- **Average Repair Latency:** 4.79 seconds from traceback to green test assertions.
+- **Trace Dataset:** Full serialized traces with Beam reasoning chains are published in `benchmarks/traces.jsonl`.
+
+---
+
+## 🔒 Security & Containment Architecture
+
+- **Subprocess Environment Scrubbing:** Strips host credentials (`REFLECTION_API_KEY`, tokens, and secrets) from the execution sandbox.
+- **Strict Path Traversal Protection:** Verifies file writes and reads using `os.path.realpath` and `os.path.commonpath`.
+- **Bytecode Isolation:** Sets `PYTHONDONTWRITEBYTECODE=1` to guarantee immediate recompilation without stale `.pyc` caching errors.
+- **Timeout Enforcement:** Subprocesses terminate safely after 15 seconds.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full system design details.
+
+---
+
+## 🚀 Quickstart
+
+### 1. Installation
 ```bash
 git clone https://github.com/ionvovos/beamarena.git
 cd beamarena
-uv venv && uv pip install -r requirements.txt
-export REFLECTION_API_KEY="your-key-here"
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-# Run live autonomous repair demo
-python3 examples/live_agent_demo.py
+### 2. Configure Environment
+```bash
+export REFLECTION_API_KEY="your-reflection-api-key"
+```
 
-# Launch local Web UI
+### 3. Run Autonomous Repair via CLI
+```bash
+# List available benchmark scenarios
+python3 cli.py list
+
+# Solve a scenario autonomously
+python3 cli.py solve --scenario 01_fastapi_auth
+
+# Ingest a codebase in 1M-context mode
+python3 cli.py ingest core
+```
+
+### 4. Run Automated Benchmark Suite
+```bash
+python3 scripts/run_benchmarks.py
+```
+
+### 5. Launch Interactive Web UI
+```bash
 python3 app.py
 ```
+
+---
+
+## 📄 License
+
+Apache License 2.0. Built by **Ion Vovos** for the Reflection AI × Hugging Face 2026 Challenge.

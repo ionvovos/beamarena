@@ -1,14 +1,17 @@
 """Beam Client Module.
 
 Handles API communication with Reflection AI (Beam-1.0-501B-A23B).
-Supports streaming, reasoning trace extraction, and structured token telemetry.
+Supports streaming, reasoning trace extraction, structured token telemetry,
+SSL verification, and automatic exponential backoff retries.
 """
 
 from dataclasses import dataclass, field
 import json
 import os
 import ssl
+import time
 from typing import Any, Callable, Dict, Iterator, List, Optional
+import urllib.error
 import urllib.request
 
 
@@ -65,11 +68,9 @@ class BeamClient:
             raise ValueError("REFLECTION_API_KEY is missing. Check your .env file or environment.")
 
     def _get_ssl_context(self) -> ssl.SSLContext:
+        """Returns verified SSL context by default with unverified fallback."""
         try:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            return ctx
+            return ssl.create_default_context()
         except Exception:
             return ssl._create_unverified_context()
 
@@ -79,7 +80,7 @@ class BeamClient:
         temperature: float = 0.7,
         top_p: float = 0.95,
         max_tokens: int = 16000,
-        reasoning_effort: str = "max",
+        reasoning_effort: str = "medium",
     ) -> BeamResponse:
         """Non-streaming convenience wrapper that consumes stream_chat to bypass Beta API non-streaming truncation."""
         return self.stream_chat(
@@ -87,6 +88,7 @@ class BeamClient:
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
         )
 
     def stream_chat(
@@ -95,10 +97,13 @@ class BeamClient:
         temperature: float = 0.7,
         top_p: float = 0.95,
         max_tokens: int = 4096,
+        reasoning_effort: str = "medium",
         on_reasoning: Optional[Callable[[str], None]] = None,
         on_content: Optional[Callable[[str], None]] = None,
+        max_retries: int = 3,
+        timeout: float = 60.0,
     ) -> BeamResponse:
-        """Streams tokens from Beam, calling callbacks for reasoning and content chunks."""
+        """Streams tokens from Beam, calling callbacks for reasoning and content chunks with retry backoff."""
         payload = {
             "model": self.model,
             "messages": messages,
@@ -108,6 +113,8 @@ class BeamClient:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if reasoning_effort:
+            payload["reasoning_effort"] = reasoning_effort
 
         req = urllib.request.Request(
             f"{self.base_url}/chat/completions",
@@ -118,16 +125,30 @@ class BeamClient:
             data=json.dumps(payload).encode("utf-8"),
         )
 
-        ctx = self._get_ssl_context()
-        try:
-            resp = urllib.request.urlopen(req, context=ctx)
-        except urllib.error.URLError:
-            ctx_unverified = ssl._create_unverified_context()
-            resp = urllib.request.urlopen(req, context=ctx_unverified)
+        resp = None
+        for attempt in range(max_retries):
+            try:
+                try:
+                    resp = urllib.request.urlopen(req, context=self._get_ssl_context(), timeout=timeout)
+                except urllib.error.URLError as e:
+                    # Controlled fallback if host cert verify fails
+                    if "CERTIFICATE_VERIFY_FAILED" in str(e):
+                        resp = urllib.request.urlopen(req, context=ssl._create_unverified_context(), timeout=timeout)
+                    else:
+                        raise e
+                break
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as err:
+                if attempt == max_retries - 1:
+                    raise
+                backoff = 1.5 * (2 ** attempt)
+                time.sleep(backoff)
 
         full_reasoning: List[str] = []
         full_content: List[str] = []
         usage = TokenUsage()
+
+        if resp is None:
+            raise RuntimeError("Failed to establish connection to Reflection API.")
 
         with resp:
             for raw_line in resp:

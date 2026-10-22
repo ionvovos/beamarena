@@ -216,8 +216,154 @@ if __name__ == "__main__":
     }
 )
 
+
+SCENARIO_04_CACHE_BUS = Scenario(
+    id="04_cache_invalidation",
+    title="Event Bus Cache Invalidation & Stale Entity State",
+    difficulty="Hard",
+    description="The multi-file event bus fails to evict tagged cache entries when user records are updated across modules. Fix cache.py and event_bus.py so that tests/test_cache.py passes.",
+    test_command="python3 -m unittest tests.test_cache",
+    files={
+        "tests/__init__.py": "# tests package\n",
+        "event_bus.py": """from typing import Callable, Dict, List
+
+class EventBus:
+    def __init__(self):
+        self.subscribers: Dict[str, List[Callable]] = {}
+
+    def subscribe(self, event_type: str, callback: Callable):
+        if event_type not in self.subscribers:
+            self.subscribers[event_type] = []
+        self.subscribers[event_type].append(callback)
+
+    def publish(self, event_type: str, payload: dict):
+        # BUG: Fails to pass payload or ignores event subscribers if not registered
+        if event_type in self.subscribers:
+            for cb in self.subscribers[event_type]:
+                cb()
+""",
+        "cache.py": """from typing import Any, Dict, Optional
+
+class TaggedCache:
+    def __init__(self):
+        self._store: Dict[str, Any] = {}
+        self._tags: Dict[str, set] = {}
+
+    def set(self, key: str, value: Any, tags: Optional[list] = None):
+        self._store[key] = value
+        if tags:
+            for t in tags:
+                if t not in self._tags:
+                    self._tags[t] = set()
+                self._tags[t].add(key)
+
+    def get(self, key: str) -> Optional[Any]:
+        return self._store.get(key)
+
+    def invalidate_tag(self, tag: str):
+        # BUG: Only clears the tag registry but does not remove keys from _store
+        if tag in self._tags:
+            self._tags[tag].clear()
+""",
+        "service.py": """from event_bus import EventBus
+from cache import TaggedCache
+
+bus = EventBus()
+cache = TaggedCache()
+
+def setup_listeners():
+    def on_user_updated(payload=None):
+        # Invalidate all user-tagged cache entries
+        cache.invalidate_tag("users")
+
+    bus.subscribe("user_updated", on_user_updated)
+
+def update_user(user_id: str, new_name: str):
+    # Mutates user and notifies bus
+    bus.publish("user_updated", {"user_id": user_id, "name": new_name})
+""",
+        "tests/test_cache.py": """import unittest
+from event_bus import EventBus
+from cache import TaggedCache
+import service
+
+class TestTaggedCache(unittest.TestCase):
+    def setUp(self):
+        service.cache = TaggedCache()
+        service.bus = EventBus()
+        service.setup_listeners()
+
+    def test_cache_invalidation_on_event(self):
+        service.cache.set("user:101", {"name": "Alice"}, tags=["users"])
+        self.assertEqual(service.cache.get("user:101")["name"], "Alice")
+
+        # Update user triggers invalidation
+        service.update_user("user:101", "Alice New")
+        self.assertIsNone(service.cache.get("user:101"))
+
+if __name__ == "__main__":
+    unittest.main()
+"""
+    }
+)
+
+
+SCENARIO_05_REGISTRY = Scenario(
+    id="05_plugin_dependency_order",
+    title="Topological Dependency Ordering & Circular Dependency Detection",
+    difficulty="Hard",
+    description="The PluginRegistry executes plugins in random order and enters infinite recursion on circular dependencies. Fix registry.py so that tests/test_registry.py passes.",
+    test_command="python3 -m unittest tests.test_registry",
+    files={
+        "tests/__init__.py": "# tests package\n",
+        "registry.py": """from typing import Dict, List, Set
+
+class CircularDependencyError(Exception):
+    pass
+
+class PluginRegistry:
+    def __init__(self):
+        self.plugins: Dict[str, List[str]] = {}
+
+    def register(self, name: str, depends_on: List[str] = None):
+        self.plugins[name] = depends_on or []
+
+    def get_load_order(self) -> List[str]:
+        # BUG: Simple dict iteration does not sort by dependency,
+        # and has no circular dependency detection
+        return list(self.plugins.keys())
+""",
+        "tests/test_registry.py": """import unittest
+from registry import PluginRegistry, CircularDependencyError
+
+class TestRegistry(unittest.TestCase):
+    def test_dependency_resolution(self):
+        reg = PluginRegistry()
+        reg.register("auth", depends_on=["db"])
+        reg.register("db", depends_on=[])
+        reg.register("api", depends_on=["auth"])
+        
+        order = reg.get_load_order()
+        self.assertEqual(order, ["db", "auth", "api"])
+
+    def test_circular_dependency_detection(self):
+        reg = PluginRegistry()
+        reg.register("A", depends_on=["B"])
+        reg.register("B", depends_on=["A"])
+        with self.assertRaises(CircularDependencyError):
+            reg.get_load_order()
+
+if __name__ == "__main__":
+    unittest.main()
+"""
+    }
+)
+
+
 ALL_SCENARIOS = {
     SCENARIO_01_AUTH.id: SCENARIO_01_AUTH,
     SCENARIO_02_WALLET.id: SCENARIO_02_WALLET,
     SCENARIO_03_TRANSFORM.id: SCENARIO_03_TRANSFORM,
+    SCENARIO_04_CACHE_BUS.id: SCENARIO_04_CACHE_BUS,
+    SCENARIO_05_REGISTRY.id: SCENARIO_05_REGISTRY,
 }

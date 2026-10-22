@@ -1,11 +1,12 @@
 """Repository Ingestor & 1M-Context Packer.
 
-Scans local codebases, extracts structural AST outlines, filters noise,
+Scans local codebases, extracts structural AST outlines, filters noise and credentials,
 and packs entire projects into Beam's 1-million-token context window.
 """
 
 import ast
 from dataclasses import dataclass, field
+import fnmatch
 import os
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -28,6 +29,21 @@ DEFAULT_IGNORES: Set[str] = {
     ".idea",
     ".vscode",
 }
+
+CREDENTIAL_PATTERNS: List[str] = [
+    ".env*",
+    "*.pem",
+    "*.key",
+    "*.pkcs12",
+    "*.pfx",
+    "*.p12",
+    "id_rsa*",
+    "id_ed25519*",
+    "*token*",
+    "*secret*",
+    "credentials.json",
+    "client_secret*.json",
+]
 
 BINARY_EXTENSIONS: Set[str] = {
     ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg",
@@ -103,6 +119,10 @@ class RepoIngestor:
         _, ext = os.path.splitext(filename.lower())
         return ext in BINARY_EXTENSIONS
 
+    def is_credential_or_secret(self, filename: str) -> bool:
+        lower = filename.lower()
+        return any(fnmatch.fnmatch(lower, pat) for pat in CREDENTIAL_PATTERNS)
+
     def parse_python_symbols(self, content: str) -> List[SymbolInfo]:
         """Extracts class and function definitions using standard ast module."""
         symbols = []
@@ -149,6 +169,8 @@ class RepoIngestor:
                 if fname in self.ignores or fname.startswith("."):
                     continue
                 if self.is_binary(fname):
+                    continue
+                if self.is_credential_or_secret(fname):
                     continue
 
                 full_path = os.path.join(dirpath, fname)

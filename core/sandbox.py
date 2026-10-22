@@ -1,7 +1,8 @@
 """Sandbox Execution Engine.
 
 Provides an isolated environment for writing files, running tests,
-and capturing execution tracebacks safely without corrupting the parent system.
+and capturing execution tracebacks safely without corrupting the parent system
+or leaking host credentials.
 """
 
 from dataclasses import dataclass
@@ -29,17 +30,37 @@ class Sandbox:
             self.root = tempfile.mkdtemp(prefix="beam_sandbox_", dir=base_dir)
         else:
             self.root = tempfile.mkdtemp(prefix="beam_sandbox_")
+        self.root = os.path.realpath(self.root)
         self._is_cleaned = False
+
+    def _resolve_safe_path(self, rel_path: str) -> str:
+        """Resolves rel_path against sandbox root and strictly verifies containment."""
+        # Normalize and remove leading slashes/drives
+        safe_rel = os.path.normpath(rel_path).lstrip(os.sep)
+        target = os.path.abspath(os.path.join(self.root, safe_rel))
+        real_root = os.path.realpath(self.root)
+        real_target = os.path.realpath(target)
+
+        # If file doesn't exist yet, check its real parent directory
+        if not os.path.exists(real_target):
+            parent = os.path.realpath(os.path.dirname(target))
+            try:
+                if os.path.commonpath([parent, real_root]) != real_root:
+                    raise ValueError(f"Path traversal attempted: {rel_path}")
+            except ValueError:
+                raise ValueError(f"Path traversal attempted: {rel_path}")
+        else:
+            try:
+                if os.path.commonpath([real_target, real_root]) != real_root:
+                    raise ValueError(f"Path traversal attempted: {rel_path}")
+            except ValueError:
+                raise ValueError(f"Path traversal attempted: {rel_path}")
+
+        return target
 
     def write_file(self, rel_path: str, content: str) -> str:
         """Writes content to a file inside the sandbox, creating parent directories."""
-        safe_rel = os.path.normpath(rel_path).lstrip(os.sep)
-        target = os.path.join(self.root, safe_rel)
-
-        # Enforce sandbox containment
-        if not os.path.abspath(target).startswith(os.path.abspath(self.root)):
-            raise ValueError(f"Path traversal attempted: {rel_path}")
-
+        target = self._resolve_safe_path(rel_path)
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
             f.write(content)
@@ -47,9 +68,7 @@ class Sandbox:
 
     def read_file(self, rel_path: str) -> str:
         """Reads content from a file inside the sandbox."""
-        safe_rel = os.path.normpath(rel_path).lstrip(os.sep)
-        target = os.path.join(self.root, safe_rel)
-
+        target = self._resolve_safe_path(rel_path)
         if not os.path.exists(target):
             raise FileNotFoundError(f"File not found in sandbox: {rel_path}")
 
@@ -71,21 +90,69 @@ class Sandbox:
         for path, content in file_map.items():
             self.write_file(path, content)
 
+    def _sanitize_env(self, custom_vars: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        """Creates an isolated subprocess environment stripped of secrets and tokens."""
+        # Whitelist safe standard environment variables
+        safe_keys = {
+            "PATH",
+            "SYSTEMROOT",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "PYTHONHASHSEED",
+            "TERM",
+            "VIRTUAL_ENV",
+        }
+        sanitized: Dict[str, str] = {}
+        for k, v in os.environ.items():
+            k_upper = k.upper()
+            # Explicitly deny secrets, keys, credentials, tokens
+            if any(term in k_upper for term in ["KEY", "TOKEN", "SECRET", "PASS", "CRED", "AUTH"]):
+                continue
+            if k in safe_keys:
+                sanitized[k] = v
+
+        # Contain user home and temp directories inside sandbox
+        sanitized["HOME"] = self.root
+        sanitized["TMPDIR"] = self.root
+        sanitized["TEMP"] = self.root
+        sanitized["TMP"] = self.root
+        sanitized["PYTHONPATH"] = self.root
+        sanitized["PYTHONDONTWRITEBYTECODE"] = "1"
+
+        # Inherit current python venv path if active
+        import sys
+        venv_bin = os.path.dirname(os.path.abspath(sys.executable))
+        prefix_bin = os.path.join(sys.prefix, "bin")
+        extra_bins = [b for b in [venv_bin, prefix_bin] if os.path.exists(b)]
+
+        if "PATH" in sanitized:
+            paths = sanitized["PATH"].split(os.pathsep)
+            for b in reversed(extra_bins):
+                if b not in paths:
+                    paths.insert(0, b)
+            sanitized["PATH"] = os.pathsep.join(paths)
+        else:
+            sanitized["PATH"] = os.pathsep.join(extra_bins + ["/usr/local/bin", "/usr/bin", "/bin"])
+
+        if custom_vars:
+            for k, v in custom_vars.items():
+                k_upper = k.upper()
+                if not any(term in k_upper for term in ["KEY", "TOKEN", "SECRET", "PASS", "CRED", "AUTH"]):
+                    sanitized[k] = v
+
+        return sanitized
+
     def run_command(
         self,
         command: List[str],
         timeout_seconds: float = 15.0,
         env_vars: Optional[Dict[str, str]] = None,
     ) -> ExecutionResult:
-        """Runs a command strictly inside the sandbox directory."""
+        """Runs a command strictly inside the sandbox directory with scrubbed environment."""
         import time
 
-        env = os.environ.copy()
-        if env_vars:
-            env.update(env_vars)
-        # Ensure Python can import from current directory
-        env["PYTHONPATH"] = self.root + (f":{env.get('PYTHONPATH', '')}" if "PYTHONPATH" in env else "")
-
+        env = self._sanitize_env(env_vars)
         start_time = time.time()
         try:
             proc = subprocess.run(
@@ -110,8 +177,9 @@ class Sandbox:
             return ExecutionResult(
                 command=" ".join(command),
                 exit_code=-1,
-                stdout=e.stdout or "",
-                stderr=(e.stderr or "") + f"\n[Command timed out after {timeout_seconds}s]",
+                stdout=e.stdout if isinstance(e.stdout, str) else (e.stdout.decode("utf-8", "replace") if e.stdout else ""),
+                stderr=((e.stderr if isinstance(e.stderr, str) else (e.stderr.decode("utf-8", "replace") if e.stderr else ""))
+                        + f"\n[Command timed out after {timeout_seconds}s]"),
                 timed_out=True,
                 duration_seconds=round(duration, 3),
             )
