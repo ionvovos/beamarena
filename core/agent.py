@@ -108,12 +108,14 @@ class AutonomousCodingAgent:
         client: Optional[BeamClient] = None,
         max_turns: int = 3,
         max_token_budget: int = 100000,
+        persist_trace: bool = True,
         on_turn_start: Optional[Callable[[int], None]] = None,
         on_turn_complete: Optional[Callable[[AgentTurn], None]] = None,
     ):
         self.client = client or BeamClient()
         self.max_turns = max_turns
         self.max_token_budget = max_token_budget
+        self.persist_trace = persist_trace
         self.parser = ToolParser()
         self.on_turn_start = on_turn_start
         self.on_turn_complete = on_turn_complete
@@ -280,6 +282,8 @@ class AutonomousCodingAgent:
 
     def _persist_trace(self, trace: AgentSessionTrace) -> None:
         """Appends the execution trace to benchmarks/traces.jsonl."""
+        if not self.persist_trace or trace.scenario_id.startswith("mock_"):
+            return
         try:
             traces_dir = os.path.join(os.path.dirname(__file__), "..", "benchmarks")
             os.makedirs(traces_dir, exist_ok=True)

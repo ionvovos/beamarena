@@ -43,7 +43,7 @@ pytest test_calc.py
     )
 
     client = MockBeamClient([mock_resp])
-    agent = AutonomousCodingAgent(client=client, max_turns=2)
+    agent = AutonomousCodingAgent(client=client, max_turns=2, persist_trace=False)
 
     with Sandbox() as sb:
         sb.write_file("calc.py", "def add(a, b):\n    return 0\n")
@@ -91,7 +91,7 @@ pytest test_calc.py
     )
 
     client = MockBeamClient([resp1, resp2])
-    agent = AutonomousCodingAgent(client=client, max_turns=3)
+    agent = AutonomousCodingAgent(client=client, max_turns=3, persist_trace=False)
 
     with Sandbox() as sb:
         sb.write_file("calc.py", "def add(a, b):\n    return 0\n")
