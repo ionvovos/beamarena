@@ -360,10 +360,87 @@ if __name__ == "__main__":
 )
 
 
+
+SCENARIO_06_RATE_LIMITER = Scenario(
+    id="06_distributed_rate_limiter",
+    title="Token Bucket Rate Limiter with Sliding Window Burst Control",
+    difficulty="Hard",
+    description="The TokenBucketRateLimiter drops fractional tokens and fails burst capacity enforcement. Fix rate_limiter.py so that tests/test_rate_limiter.py passes.",
+    test_command="python3 -m unittest tests.test_rate_limiter",
+    files={
+        "tests/__init__.py": "# tests\n",
+        "rate_limiter.py": "import time\n\nclass TokenBucketRateLimiter:\n    def __init__(self, capacity, refill_rate, burst_capacity=None, clock=time.monotonic):\n        self.capacity = capacity\n        self.refill_rate = refill_rate\n        self.burst_capacity = burst_capacity or capacity\n        self.clock = clock\n        self.tokens = self.capacity\n        self.last_refill = self.clock()\n\n    def allow(self, tokens=1, now=None):\n        if now is None:\n            now = self.clock()\n\n        elapsed = now - self.last_refill\n        if elapsed > 0:\n            self.tokens += int(elapsed * self.refill_rate)\n            if self.tokens > self.capacity:\n                self.tokens = self.capacity\n            self.last_refill = now\n\n        if tokens <= self.tokens:\n            self.tokens -= tokens\n            return True\n        return False\n",
+        "tests/test_rate_limiter.py": "import unittest\nfrom rate_limiter import TokenBucketRateLimiter\n\nclass TestTokenBucketRateLimiter(unittest.TestCase):\n    def test_initial_capacity(self):\n        limiter = TokenBucketRateLimiter(capacity=3, refill_rate=1, clock=lambda: 0.0)\n        for _ in range(3):\n            self.assertTrue(limiter.allow())\n        self.assertFalse(limiter.allow())\n\n    def test_consumption_and_rejection(self):\n        limiter = TokenBucketRateLimiter(capacity=5, refill_rate=1, clock=lambda: 0.0)\n        self.assertTrue(limiter.allow(2))\n        self.assertTrue(limiter.allow(2))\n        self.assertFalse(limiter.allow(2))\n        self.assertTrue(limiter.allow(1))\n\n    def test_replenishment_over_simulated_time(self):\n        limiter = TokenBucketRateLimiter(capacity=2, refill_rate=2, clock=lambda: 0.0)\n        self.assertTrue(limiter.allow(2))\n        self.assertFalse(limiter.allow(1))\n        self.assertTrue(limiter.allow(1, now=0.5))\n        self.assertFalse(limiter.allow(1, now=0.5))\n        self.assertTrue(limiter.allow(1, now=1.0))\n\n    def test_burst_capacity_handling(self):\n        limiter = TokenBucketRateLimiter(\n            capacity=1, refill_rate=1, burst_capacity=4, clock=lambda: 0.0\n        )\n        for _ in range(4):\n            self.assertTrue(limiter.allow())\n        self.assertFalse(limiter.allow())\n\nif __name__ == '__main__':\n    unittest.main()\n"
+}
+)
+
+
+SCENARIO_07_WEBSOCKET = Scenario(
+    id="07_websocket_backoff",
+    title="WebSocket Exponential Backoff with Jitter and Reconnect Replay",
+    difficulty="Medium",
+    description="A WebSocket client must compute bounded exponential backoff with jitter, replay unacknowledged messages after reconnect, and reset its failure counter after a successful connection.",
+    test_command="python3 -m unittest tests.test_client",
+    files={
+        "tests/__init__.py": "",
+        "client.py": "import random\n\n\nclass WebSocketClient:\n    def __init__(self, base_delay=1.0, max_backoff=30.0, jitter=0.0, rng=None):\n        self.base_delay = base_delay\n        self.max_backoff = max_backoff\n        self.jitter = jitter\n        self.rng = rng if rng is not None else random.Random()\n        self.consecutive_failures = 0\n        self.pending_messages = []\n        self.unacknowledged = []\n        self.connected = False\n\n    def compute_backoff(self, attempt=None):\n        if attempt is None:\n            attempt = self.consecutive_failures\n        delay = self.base_delay * (2 ** attempt)\n        if delay > self.max_backoff:\n            delay = self.max_backoff\n        # BUG: jitter is ignored.\n        return delay\n\n    def connect(self):\n        self.connected = True\n        # BUG: consecutive_failures is never reset.\n        return True\n\n    def disconnect(self):\n        self.connected = False\n        self.consecutive_failures += 1\n\n    def send(self, message):\n        if not self.connected:\n            raise RuntimeError(\"client is not connected\")\n        self.pending_messages.append(message)\n        self.unacknowledged.append(message)\n\n    def acknowledge(self, message):\n        if message in self.unacknowledged:\n            self.unacknowledged.remove(message)\n\n    def reconnect(self):\n        self.connected = False\n        # BUG: unacknowledged messages are dropped instead of being re-queued.\n        return self.connect()\n",
+        "tests/test_client.py": "import random\nimport unittest\n\nfrom client import WebSocketClient\n\n\nclass TestWebSocketClient(unittest.TestCase):\n    def test_compute_backoff_uses_jitter_and_respects_max(self):\n        first_rng = random.Random(1)\n        second_rng = random.Random(2)\n        first_client = WebSocketClient(\n            base_delay=2.0, max_backoff=5.0, jitter=1.0, rng=first_rng\n        )\n        second_client = WebSocketClient(\n            base_delay=2.0, max_backoff=5.0, jitter=1.0, rng=second_rng\n        )\n\n        first_delay = first_client.compute_backoff(0)\n        second_delay = second_client.compute_backoff(0)\n\n        self.assertNotEqual(first_delay, second_delay)\n        self.assertGreaterEqual(first_delay, 2.0)\n        self.assertLessEqual(first_delay, 3.0)\n        self.assertLessEqual(\n            first_client.compute_backoff(10), first_client.max_backoff\n        )\n\n    def test_reconnect_requeues_unacknowledged_messages(self):\n        client = WebSocketClient()\n        client.connect()\n        client.send(\"message-1\")\n        client.send(\"message-2\")\n        client.acknowledge(\"message-1\")\n\n        client.disconnect()\n        client.reconnect()\n\n        self.assertTrue(client.connected)\n        self.assertIn(\"message-2\", client.pending_messages)\n        self.assertEqual(client.unacknowledged, [])\n\n    def test_successful_connect_resets_failure_counter(self):\n        client = WebSocketClient()\n        client.consecutive_failures = 4\n        client.connect()\n        self.assertEqual(client.consecutive_failures, 0)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+}
+)
+
+
+SCENARIO_08_POOL = Scenario(
+    id="08_async_resource_db_pool_context_manager_leak_prevention",
+    title="Async Resource / DB Pool Context Manager Leak Prevention",
+    difficulty="Medium",
+    description="Fix an async connection pool so acquired connections are released even when exceptions occur, exhausted pools raise PoolExhaustedError instead of deadlocking, and the checked-out gauge is decremented on release.",
+    test_command="python3 -m unittest tests.test_pool",
+    files={
+        "tests/__init__.py": "",
+        "pool.py": "import asyncio\nfrom contextlib import asynccontextmanager\n\n\nclass PoolExhaustedError(Exception):\n    \"\"\"Raised when no connection becomes available before timeout.\"\"\"\n    pass\n\n\nclass ConnectionPool:\n    def __init__(self, factory, max_size=2, acquire_timeout=0.1):\n        self.factory = factory\n        self.max_size = max_size\n        self.acquire_timeout = acquire_timeout\n        self._available = asyncio.Queue(maxsize=max_size)\n        self._size = 0\n        self._checked_out = 0\n        self._lock = asyncio.Lock()\n\n    @property\n    def checked_out(self):\n        return self._checked_out\n\n    @asynccontextmanager\n    async def acquire(self, timeout=None):\n        conn = await self._acquire(timeout)\n        self._checked_out += 1\n        yield conn\n        await self._release(conn)\n\n    async def _acquire(self, timeout):\n        async with self._lock:\n            if self._size < self.max_size:\n                conn = await self.factory()\n                self._size += 1\n                return conn\n\n        if timeout is None:\n            timeout = self.acquire_timeout\n\n        # BUG: timeout is accepted but never applied, so an exhausted pool waits forever.\n        return await self._available.get()\n\n    async def _release(self, conn):\n        await self._available.put(conn)\n        # BUG: the checked-out gauge is never decremented.\n",
+        "tests/test_pool.py": "import asyncio\nimport unittest\n\nfrom pool import ConnectionPool, PoolExhaustedError\n\n\nasync def make_connection():\n    return object()\n\n\nclass TestConnectionPool(unittest.IsolatedAsyncioTestCase):\n    async def test_release_on_exception(self):\n        pool = ConnectionPool(make_connection, max_size=1)\n\n        with self.assertRaises(ValueError):\n            async with pool.acquire():\n                raise ValueError(\"boom\")\n\n        self.assertEqual(pool.checked_out, 0)\n\n        async with pool.acquire() as conn:\n            self.assertIsNotNone(conn)\n\n    async def test_timeout_when_exhausted(self):\n        pool = ConnectionPool(make_connection, max_size=1)\n\n        async def attempt():\n            async with pool.acquire(timeout=0.05):\n                pass\n\n        async with pool.acquire():\n            with self.assertRaises(PoolExhaustedError):\n                await asyncio.wait_for(attempt(), timeout=0.2)\n\n    async def test_checked_out_gauge_decremented(self):\n        pool = ConnectionPool(make_connection, max_size=2)\n\n        async with pool.acquire():\n            self.assertEqual(pool.checked_out, 1)\n\n        self.assertEqual(pool.checked_out, 0)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+}
+)
+
+
+SCENARIO_09_MIGRATION = Scenario(
+    id="09_event_schema_evolution",
+    title="Event Schema Evolution and Backward Compatibility Migration",
+    difficulty="Hard",
+    description="Fix event payload migration so optional legacy fields do not raise KeyError, numeric IDs are coerced recursively throughout nested payloads, and schema migrations apply every intermediate transform in version order.",
+    test_command="python3 -m unittest tests.test_migrator",
+    files={
+        "tests/__init__.py": "",
+        "migrator.py": "VERSIONS = [\"v1\", \"v1.1\", \"v2\"]\n\n\ndef transform_v1_to_v1_1(payload):\n    result = dict(payload)\n    result.setdefault(\"metadata\", {})\n    result.setdefault(\"created_at\", None)\n    result[\"v1_1_applied\"] = True\n    return result\n\n\ndef transform_v1_1_to_v2(payload):\n    result = dict(payload)\n    result[\"schema_version\"] = \"v2\"\n    result[\"v2_applied\"] = True\n    return result\n\n\nTRANSFORMS = {\n    (\"v1\", \"v1.1\"): transform_v1_to_v1_1,\n    (\"v1.1\", \"v2\"): transform_v1_1_to_v2,\n}\n\n\ndef coerce_numeric_ids(payload):\n    # BUG: only coerces a few top-level keys and ignores nested values.\n    result = dict(payload)\n    for key in (\"event_id\", \"user_id\"):\n        if key in result and isinstance(result[key], str) and result[key].isdigit():\n            result[key] = int(result[key])\n    return result\n\n\ndef migrate_payload(payload, from_version=\"v1\", to_version=\"v2\"):\n    # BUG: accesses optional fields directly and skips intermediate transforms.\n    result = dict(payload)\n    result[\"metadata\"] = payload[\"metadata\"]\n    result[\"created_at\"] = payload[\"created_at\"]\n    result[\"schema_version\"] = to_version\n    return coerce_numeric_ids(result)\n",
+        "tests/test_migrator.py": "import unittest\n\nfrom migrator import coerce_numeric_ids, migrate_payload\n\n\nclass TestMigrator(unittest.TestCase):\n    def test_missing_optional_fields_do_not_raise(self):\n        payload = {\"event_id\": \"1\", \"type\": \"created\"}\n        result = migrate_payload(payload)\n\n        self.assertEqual(result[\"metadata\"], {})\n        self.assertIsNone(result[\"created_at\"])\n        self.assertEqual(result[\"schema_version\"], \"v2\")\n        self.assertTrue(result[\"v1_1_applied\"])\n        self.assertTrue(result[\"v2_applied\"])\n\n    def test_nested_numeric_ids_are_coerced(self):\n        payload = {\n            \"event_id\": \"123\",\n            \"data\": {\n                \"user_id\": \"456\",\n                \"items\": [{\"id\": \"789\"}, {\"id\": \"not-a-number\"}],\n            },\n        }\n        result = coerce_numeric_ids(payload)\n\n        self.assertEqual(result[\"event_id\"], 123)\n        self.assertEqual(result[\"data\"][\"user_id\"], 456)\n        self.assertEqual(result[\"data\"][\"items\"][0][\"id\"], 789)\n        self.assertEqual(result[\"data\"][\"items\"][1][\"id\"], \"not-a-number\")\n\n    def test_migration_applies_intermediate_transforms(self):\n        payload = {\"event_id\": \"9\", \"metadata\": {\"source\": \"legacy\"}}\n        result = migrate_payload(payload)\n\n        self.assertEqual(result[\"event_id\"], 9)\n        self.assertEqual(result[\"metadata\"], {\"source\": \"legacy\"})\n        self.assertTrue(result[\"v1_1_applied\"])\n        self.assertTrue(result[\"v2_applied\"])\n        self.assertEqual(result[\"schema_version\"], \"v2\")\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+}
+)
+
+
+SCENARIO_10_PIPELINE = Scenario(
+    id="10_memory_bounded_chunked_stream_pipeline",
+    title="Memory-Bounded Chunked Stream Pipeline with Backpressure",
+    difficulty="Hard",
+    description="A streaming pipeline must transform input in bounded chunks, invoke backpressure when a chunk reaches the configured buffer size, and aggregate byte/text chunks into complete records using record delimiters rather than fixed-size truncation.",
+    test_command="python3 -m unittest tests.test_pipeline",
+    files={
+        "tests/__init__.py": "",
+        "pipeline.py": "import collections\n\n\ndef stream_transform(source, transform, max_buffer_size=4, backpressure_callback=None):\n    \"\"\"Transform a source stream in bounded chunks.\n\n    The buggy implementation materializes the entire source before yielding.\n    \"\"\"\n    # BUG: loads the whole input generator into memory before yielding.\n    data = list(source)\n    buffer = []\n    for item in data:\n        buffer.append(item)\n        if len(buffer) >= max_buffer_size:\n            if backpressure_callback is not None:\n                backpressure_callback()\n            for buffered_item in buffer:\n                yield transform(buffered_item)\n            buffer.clear()\n    for buffered_item in buffer:\n        yield transform(buffered_item)\n\n\ndef aggregate_chunks(chunks, delimiter=\"\\n\", chunk_size=8):\n    \"\"\"Aggregate chunks into records.\n\n    The buggy implementation slices fixed-size pieces and can split records.\n    \"\"\"\n    buffer = \"\"\n    for chunk in chunks:\n        buffer += chunk\n        # BUG: truncates at an arbitrary fixed size instead of delimiter.\n        while len(buffer) >= chunk_size:\n            yield buffer[:chunk_size]\n            buffer = buffer[chunk_size:]\n    if buffer:\n        yield buffer\n",
+        "tests/test_pipeline.py": "import unittest\nfrom pipeline import stream_transform, aggregate_chunks\n\n\nclass TestPipeline(unittest.TestCase):\n    def test_stream_transform_does_not_materialize_entire_source(self):\n        consumed = []\n\n        def source():\n            for value in range(1000):\n                consumed.append(value)\n                yield value\n\n        transformed = list(stream_transform(source(), lambda x: x * 2, max_buffer_size=4))\n        self.assertEqual(transformed, [x * 2 for x in range(1000)])\n        self.assertEqual(len(consumed), 1000)\n\n    def test_backpressure_callback_is_triggered(self):\n        calls = []\n\n        def source():\n            for value in range(10):\n                yield value\n\n        result = list(\n            stream_transform(\n                source(),\n                lambda x: x,\n                max_buffer_size=3,\n                backpressure_callback=lambda: calls.append(1),\n            )\n        )\n        self.assertEqual(result, list(range(10)))\n        self.assertEqual(len(calls), 3)\n\n    def test_aggregate_chunks_respects_delimiters(self):\n        chunks = [\"hel\", \"lo\\nwor\", \"ld\\n\"]\n        records = list(aggregate_chunks(chunks, delimiter=\"\\n\"))\n        self.assertEqual(records, [\"hello\", \"world\"])\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+}
+)
+
+
 ALL_SCENARIOS = {
     SCENARIO_01_AUTH.id: SCENARIO_01_AUTH,
     SCENARIO_02_WALLET.id: SCENARIO_02_WALLET,
     SCENARIO_03_TRANSFORM.id: SCENARIO_03_TRANSFORM,
     SCENARIO_04_CACHE_BUS.id: SCENARIO_04_CACHE_BUS,
     SCENARIO_05_REGISTRY.id: SCENARIO_05_REGISTRY,
+    SCENARIO_06_RATE_LIMITER.id: SCENARIO_06_RATE_LIMITER,
+    SCENARIO_07_WEBSOCKET.id: SCENARIO_07_WEBSOCKET,
+    SCENARIO_08_POOL.id: SCENARIO_08_POOL,
+    SCENARIO_09_MIGRATION.id: SCENARIO_09_MIGRATION,
+    SCENARIO_10_PIPELINE.id: SCENARIO_10_PIPELINE,
 }
+

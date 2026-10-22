@@ -74,7 +74,7 @@
 
 ## Empirical Benchmark Suite (`scenarios/`)
 
-The repository includes 5 benchmark scenarios spanning real-world engineering challenges:
+The repository includes 10 benchmark scenarios spanning real-world engineering challenges:
 
 | Scenario | Domain | Difficulty | Bug Description |
 |---|---|---|---|
@@ -83,6 +83,11 @@ The repository includes 5 benchmark scenarios spanning real-world engineering ch
 | `03_sql_data_transform` | Data Pipelines & Types | Medium | Unhandled null fields, currency string conversions, and timezone-naive formatting. |
 | `04_cache_invalidation` | Event Bus & Cache | Hard | Tagged cache fails to evict mutated entity keys upon event bus publication. |
 | `05_plugin_dependency_order` | Topological Sort & Cycles | Hard | Plugin registry lacks topological dependency sorting and circular reference detection. |
+| `06_distributed_rate_limiter` | Token Bucket & Clock Drift | Hard | Token bucket rate limiter drops fractional tokens and fails burst capacity under simulated time. |
+| `07_websocket_backoff` | Network Backoff & Jitter | Medium | WebSocket client computes fixed backoff without jitter and drops pending unacked message queue. |
+| `08_db_pool_leak` | Resource Pool & Leak Prevention | Medium | Database connection pool fails to reclaim connections on exceptions inside context manager. |
+| `09_event_schema_evolution` | Schema Evolution & Compatibility | Hard | Event migration fails on legacy v1 payloads missing optional metadata and skips intermediate version steps. |
+| `10_memory_bounded_stream` | Backpressure & Stream Memory | Hard | Stream pipeline exhausts memory buffer on large generator payloads and fails backpressure triggers. |
 
 ---
 
@@ -90,8 +95,9 @@ The repository includes 5 benchmark scenarios spanning real-world engineering ch
 
 Measured against **Beam-1.0-501B-A23B** on 2026-10-22:
 
-- **Pass Rate:** 100% (5/5 scenarios resolved).
-- **Pass@1:** 40% (2/5 on first attempt).
-- **Pass@2:** 60% (3/5 resolved on self-healing retry).
-- **Average Repair Latency:** 4.79 seconds.
-- **Average Reasoning Tokens:** 876 tokens per task.
+- **Pass Rate:** 100% (10/10 scenarios resolved).
+- **Pass@1:** 20% (2/10 on first attempt).
+- **Pass@2:** 80% (8/10 resolved on self-healing retry).
+- **Average Repair Latency:** 5.55 seconds.
+- **Average Reasoning Tokens:** 962 tokens per task.
+- **Trace Dataset:** Serialized traces with multi-turn CoT reasoning chains published in `benchmarks/traces.jsonl`.

@@ -36,7 +36,7 @@ BeamArena turns Beam into a full-cycle, test-driven **Autonomous Software Engine
 
 ## 📊 Empirical Benchmark Results
 
-Measured directly on **Beam-1.0-501B-A23B** (`api.reflection.ai`) across 5 real-world engineering scenarios:
+Measured directly on **Beam-1.0-501B-A23B** (`api.reflection.ai`) across 10 real-world engineering scenarios:
 
 | Scenario ID | Domain | Difficulty | Turns to Green | Reasoning Tokens | Total Tokens | Latency | Pass Status |
 |---|---|---|---|---|---|---|---|
@@ -45,9 +45,15 @@ Measured directly on **Beam-1.0-501B-A23B** (`api.reflection.ai`) across 5 real-
 | `03_sql_data_transform` | Data Pipelines & Types | Medium | 2 turns | 1,183 tokens | 5,164 tokens | 5.40s | **PASS@2** |
 | `04_cache_invalidation` | Event Bus & Cache | Hard | 2 turns | 436 tokens | 3,641 tokens | 4.48s | **PASS@2** |
 | `05_plugin_dependency_order` | Topological Sort & Cycles | Hard | 2 turns | 2,098 tokens | 6,108 tokens | 9.74s | **PASS@2** |
+| `06_distributed_rate_limiter` | Token Bucket & Clock Drift | Hard | 2 turns | 1,654 tokens | 5,595 tokens | 10.42s | **PASS@2** |
+| `07_websocket_backoff` | Network Backoff & Jitter | Medium | 2 turns | 1,362 tokens | 5,716 tokens | 6.49s | **PASS@2** |
+| `08_db_pool_leak` | Resource Pool & Leak Prevention | Medium | 2 turns | 640 tokens | 4,854 tokens | 5.07s | **PASS@2** |
+| `09_event_schema_evolution` | Schema Evolution & Compatibility | Hard | 2 turns | 1,068 tokens | 5,585 tokens | 6.34s | **PASS@2** |
+| `10_memory_bounded_stream` | Backpressure & Stream Memory | Hard | 2 turns | 517 tokens | 3,379 tokens | 3.20s | **PASS@2** |
 
-- **Overall Pass Rate:** 100% (5/5 scenarios resolved).
-- **Average Repair Latency:** 4.79 seconds from traceback to green test assertions.
+- **Overall Pass Rate:** 100% (10/10 scenarios resolved).
+- **Average Repair Latency:** 5.55 seconds from traceback to green test assertions.
+- **Average Reasoning Tokens:** 962 tokens per task.
 - **Trace Dataset:** Full serialized traces with Beam reasoning chains are published in `benchmarks/traces.jsonl`.
 
 ---

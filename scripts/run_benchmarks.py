@@ -37,6 +37,11 @@ def run_benchmark():
         "03_sql_data_transform": "Data Pipelines & Types",
         "04_cache_invalidation": "Event Bus & Cache",
         "05_plugin_dependency_order": "Topological Sort & Cycles",
+        "06_distributed_rate_limiter": "Token Bucket & Clock Drift",
+        "07_websocket_reconnect_backoff": "Network Backoff & Jitter",
+        "08_db_connection_pool_leak": "Resource Pool & Leak Prevention",
+        "09_schema_migration_backward_compat": "Schema Evolution & Compatibility",
+        "10_memory_bounded_stream_pipeline": "Backpressure & Stream Memory",
     }
 
     print("=" * 65)

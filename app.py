@@ -8,6 +8,7 @@ import difflib
 import json
 import os
 import time
+from typing import Dict, List, Optional
 import gradio as gr
 from core.client import BeamClient
 from core.sandbox import Sandbox
@@ -27,12 +28,57 @@ if not API_KEY and os.path.exists(".env"):
 
 
 def get_scenario_choices():
-    return [f"{s.id} — {s.title} ({s.difficulty})" for s in ALL_SCENARIOS.values()]
+    choices = [f"{s.id} — {s.title} ({s.difficulty})" for s in ALL_SCENARIOS.values()]
+    choices.append("[Custom Task] Interactive Custom Codebase Fix")
+    return choices
+
+
+def parse_custom_workspace(raw_text: str) -> Dict[str, str]:
+    files = {}
+    current_path = "solution.py"
+    current_lines = []
+    for line in (raw_text or "").splitlines():
+        if line.startswith("# =====") and line.endswith("====="):
+            if current_lines:
+                files[current_path] = "\n".join(current_lines)
+                current_lines = []
+            parts = line.split("=====")
+            if len(parts) >= 3:
+                current_path = parts[1].strip()
+        else:
+            current_lines.append(line)
+    if current_lines:
+        files[current_path] = "\n".join(current_lines)
+    return files
 
 
 def on_select_scenario(selection: str):
     if not selection:
         return "", "", ""
+    if "[Custom" in selection:
+        desc = "Diagnose and fix the discount calculation bug in solution.py."
+        cmd = "python3 test_solution.py"
+        sample_code = """# ===== solution.py =====
+def calculate_discount(price: float, discount_rate: float) -> float:
+    # BUG: mistakenly adds rate instead of subtracting discount
+    return price * (1 + discount_rate)
+
+# ===== test_solution.py =====
+import unittest
+from solution import calculate_discount
+
+class TestDiscount(unittest.TestCase):
+    def test_twenty_percent_discount(self):
+        self.assertEqual(calculate_discount(100.0, 0.20), 80.0)
+
+    def test_zero_discount(self):
+        self.assertEqual(calculate_discount(50.0, 0.0), 50.0)
+
+if __name__ == "__main__":
+    unittest.main()
+"""
+        return desc, cmd, sample_code
+
     scen_id = selection.split(" — ")[0]
     scen: Scenario = ALL_SCENARIOS.get(scen_id)
     if not scen:
@@ -49,16 +95,16 @@ def on_select_scenario(selection: str):
     )
 
 
-def run_autonomous_arena(scenario_selection: str, user_api_key: str = ""):
+def run_autonomous_arena(
+    scenario_selection: str,
+    user_api_key: str = "",
+    custom_desc: str = "",
+    custom_cmd: str = "",
+    custom_code: str = "",
+):
     """Executes the autonomous agent loop and streams reasoning + terminal logs in real time."""
     if not scenario_selection:
         yield "Please select a scenario.", "", "", "❌ Error"
-        return
-
-    scen_id = scenario_selection.split(" — ")[0]
-    scen: Scenario = ALL_SCENARIOS.get(scen_id)
-    if not scen:
-        yield "Scenario not found.", "", "", "❌ Error"
         return
 
     active_key = (user_api_key or "").strip() or os.environ.get("REFLECTION_API_KEY", "").strip()
@@ -74,26 +120,48 @@ def run_autonomous_arena(scenario_selection: str, user_api_key: str = ""):
     client = BeamClient(api_key=active_key)
     agent = AutonomousCodingAgent(client=client, max_turns=3)
 
+    is_custom = "[Custom" in scenario_selection
+    if is_custom:
+        scen_id = "custom_task"
+        title = "Interactive Custom Task"
+        desc = (custom_desc or "").strip() or "Fix the bug in the provided codebase."
+        cmd = (custom_cmd or "").strip() or "pytest"
+        files_to_load = parse_custom_workspace(custom_code)
+    else:
+        scen_id = scenario_selection.split(" — ")[0]
+        scen: Scenario = ALL_SCENARIOS.get(scen_id)
+        if not scen:
+            yield "Scenario not found.", "", "", "❌ Error"
+            return
+        title = scen.title
+        desc = (custom_desc or "").strip() or scen.description
+        cmd = (custom_cmd or "").strip() or scen.test_command
+        # If user edited code in box, parse it, otherwise load scen.files
+        if custom_code and "# =====" in custom_code:
+            files_to_load = parse_custom_workspace(custom_code)
+        else:
+            files_to_load = scen.files
+
     reasoning_log = []
     terminal_log = []
     diff_output = "No modifications made yet."
 
     with Sandbox() as sb:
-        sb.load_files(scen.files)
+        sb.load_files(files_to_load)
         original_files = {p: sb.read_file(p) for p in sb.list_files()}
 
-        terminal_log.append(f"⚡ [BeamArena] Initialized sandbox for: {scen.title}")
+        terminal_log.append(f"⚡ [BeamArena] Initialized sandbox for: {title}")
         terminal_log.append(f"📁 [Workspace] Loaded {len(original_files)} files.")
-        terminal_log.append(f"🧪 [Verification Command] {scen.test_command}\n")
+        terminal_log.append(f"🧪 [Verification Command] {cmd}\n")
         yield "\n".join(reasoning_log), "\n".join(terminal_log), diff_output, "⏳ In Progress..."
 
         final_trace = None
 
         for event, payload in agent.solve_stream(
-            task_description=scen.description,
+            task_description=desc,
             sandbox=sb,
-            test_command=scen.test_command,
-            scenario_id=scen.id,
+            test_command=cmd,
+            scenario_id=scen_id,
         ):
             if event == "turn_start":
                 turn_idx = payload
@@ -247,8 +315,8 @@ with gr.Blocks(title="BeamArena — Autonomous Coding Gym") as demo:
                         choices=get_scenario_choices(),
                         value=get_scenario_choices()[0] if get_scenario_choices() else None,
                     )
-                    description_box = gr.Textbox(label="Problem Description", lines=2, interactive=False)
-                    test_cmd_box = gr.Textbox(label="Verification Test Command", interactive=False)
+                    description_box = gr.Textbox(label="Problem Description", lines=2, interactive=True)
+                    test_cmd_box = gr.Textbox(label="Verification Test Command", interactive=True)
                     api_key_box = gr.Textbox(
                         label="Reflection API Key (Optional)",
                         placeholder="Leave blank to use pre-configured Space secret",
@@ -259,7 +327,7 @@ with gr.Blocks(title="BeamArena — Autonomous Coding Gym") as demo:
                     status_badge = gr.Textbox(label="Run Status", value="Idle", elem_classes=["status-box"])
 
                 with gr.Column(scale=6):
-                    initial_code_view = gr.Code(label="Initial Workspace Files (Buggy)", language="python", lines=12)
+                    initial_code_view = gr.Code(label="Initial Workspace Files (Buggy)", language="python", lines=12, interactive=True)
 
             with gr.Row():
                 with gr.Column(scale=5):
@@ -289,7 +357,7 @@ with gr.Blocks(title="BeamArena — Autonomous Coding Gym") as demo:
             # Wire run button
             run_btn.click(
                 fn=run_autonomous_arena,
-                inputs=[scenario_dropdown, api_key_box],
+                inputs=[scenario_dropdown, api_key_box, description_box, test_cmd_box, initial_code_view],
                 outputs=[reasoning_view, terminal_view, diff_view, status_badge]
             )
 

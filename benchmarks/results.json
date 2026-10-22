@@ -1,5 +1,5 @@
 {
-  "benchmark_timestamp": "2026-10-22T17:32:00+03:00",
+  "benchmark_timestamp": "2026-10-22T18:15:00+03:00",
   "model": "Beam-1.0-501B-A23B",
   "benchmarks": [
     {
@@ -54,6 +54,61 @@
       "reasoning_tokens": 2098,
       "total_tokens": 6108,
       "latency_seconds": 9.74,
+      "status": "\u2705 PASS@2",
+      "resolved": true
+    },
+    {
+      "scenario_id": "06_distributed_rate_limiter",
+      "domain": "Token Bucket & Clock Drift",
+      "difficulty": "Hard",
+      "turns_to_green": 2,
+      "reasoning_tokens": 1654,
+      "total_tokens": 5595,
+      "latency_seconds": 10.42,
+      "status": "\u2705 PASS@2",
+      "resolved": true
+    },
+    {
+      "scenario_id": "07_websocket_backoff",
+      "domain": "Network Backoff & Jitter",
+      "difficulty": "Medium",
+      "turns_to_green": 2,
+      "reasoning_tokens": 1362,
+      "total_tokens": 5716,
+      "latency_seconds": 6.49,
+      "status": "\u2705 PASS@2",
+      "resolved": true
+    },
+    {
+      "scenario_id": "08_async_resource_db_pool_context_manager_leak_prevention",
+      "domain": "Resource Pool & Leak Prevention",
+      "difficulty": "Medium",
+      "turns_to_green": 2,
+      "reasoning_tokens": 640,
+      "total_tokens": 4854,
+      "latency_seconds": 5.07,
+      "status": "\u2705 PASS@2",
+      "resolved": true
+    },
+    {
+      "scenario_id": "09_event_schema_evolution",
+      "domain": "Schema Evolution & Compatibility",
+      "difficulty": "Hard",
+      "turns_to_green": 2,
+      "reasoning_tokens": 1068,
+      "total_tokens": 5585,
+      "latency_seconds": 6.34,
+      "status": "\u2705 PASS@2",
+      "resolved": true
+    },
+    {
+      "scenario_id": "10_memory_bounded_chunked_stream_pipeline",
+      "domain": "Backpressure & Stream Memory",
+      "difficulty": "Hard",
+      "turns_to_green": 2,
+      "reasoning_tokens": 517,
+      "total_tokens": 3379,
+      "latency_seconds": 3.2,
       "status": "\u2705 PASS@2",
       "resolved": true
     }

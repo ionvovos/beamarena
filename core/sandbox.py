@@ -10,7 +10,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 
 @dataclass
@@ -145,18 +145,29 @@ class Sandbox:
 
     def run_command(
         self,
-        command: List[str],
+        command: Union[str, List[str]],
         timeout_seconds: float = 15.0,
         env_vars: Optional[Dict[str, str]] = None,
     ) -> ExecutionResult:
         """Runs a command strictly inside the sandbox directory with scrubbed environment."""
         import time
+        import shlex
+
+        if isinstance(command, str):
+            try:
+                cmd_list = shlex.split(command)
+            except ValueError:
+                cmd_list = command.split()
+            cmd_str = command
+        else:
+            cmd_list = list(command)
+            cmd_str = " ".join(command)
 
         env = self._sanitize_env(env_vars)
         start_time = time.time()
         try:
             proc = subprocess.run(
-                command,
+                cmd_list,
                 cwd=self.root,
                 capture_output=True,
                 text=True,
@@ -165,7 +176,7 @@ class Sandbox:
             )
             duration = time.time() - start_time
             return ExecutionResult(
-                command=" ".join(command),
+                command=cmd_str,
                 exit_code=proc.returncode,
                 stdout=proc.stdout,
                 stderr=proc.stderr,
@@ -175,7 +186,7 @@ class Sandbox:
         except subprocess.TimeoutExpired as e:
             duration = time.time() - start_time
             return ExecutionResult(
-                command=" ".join(command),
+                command=cmd_str,
                 exit_code=-1,
                 stdout=e.stdout if isinstance(e.stdout, str) else (e.stdout.decode("utf-8", "replace") if e.stdout else ""),
                 stderr=((e.stderr if isinstance(e.stderr, str) else (e.stderr.decode("utf-8", "replace") if e.stderr else ""))
@@ -186,7 +197,7 @@ class Sandbox:
         except Exception as e:
             duration = time.time() - start_time
             return ExecutionResult(
-                command=" ".join(command),
+                command=cmd_str,
                 exit_code=-2,
                 stdout="",
                 stderr=f"Execution error: {str(e)}",
