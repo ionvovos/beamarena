@@ -106,6 +106,7 @@ class BeamClient:
             "top_p": top_p,
             "max_tokens": max_tokens,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
 
         req = urllib.request.Request(
@@ -142,15 +143,15 @@ class BeamClient:
                 except Exception:
                     continue
 
+                # Usage may arrive in a final chunk with no choices.
                 if "usage" in chunk_json and chunk_json["usage"]:
                     u = chunk_json["usage"]
-                    usage.prompt_tokens = u.get("prompt_tokens", 0)
-                    usage.completion_tokens = u.get("completion_tokens", 0)
-                    usage.total_tokens = u.get("total_tokens", 0)
-                    if "completion_tokens_details" in u:
-                        usage.reasoning_tokens = u["completion_tokens_details"].get(
-                            "reasoning_tokens", 0
-                        )
+                    usage.prompt_tokens = u.get("prompt_tokens", usage.prompt_tokens)
+                    usage.completion_tokens = u.get("completion_tokens", usage.completion_tokens)
+                    usage.total_tokens = u.get("total_tokens", usage.total_tokens)
+                    details = u.get("completion_tokens_details") or {}
+                    if "reasoning_tokens" in details:
+                        usage.reasoning_tokens = details.get("reasoning_tokens", usage.reasoning_tokens)
 
                 choices = chunk_json.get("choices")
                 if not choices:

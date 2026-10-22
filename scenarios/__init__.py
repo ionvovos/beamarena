@@ -19,7 +19,7 @@ SCENARIO_01_AUTH = Scenario(
     title="Broken JWT Claim Decoding & Expiry Handling",
     difficulty="Easy",
     description="The authentication module fails when validating expired tokens and misparses user role claims. Fix auth.py so that all tests in tests/test_auth.py pass.",
-    test_command="python3 -m unittest tests/test_auth.py",
+    test_command="python3 -m unittest tests.test_auth",
     files={
         "tests/__init__.py": "# tests package\n",
         "auth.py": """import base64
@@ -97,8 +97,9 @@ SCENARIO_02_WALLET = Scenario(
     title="Wallet Balance Concurrent Overdraft Race Condition",
     difficulty="Medium",
     description="The Wallet manager allows concurrent transactions to overdraw an account because it lacks proper locking synchronization. Fix wallet.py so that tests/test_wallet.py passes.",
-    test_command="python3 -m unittest tests/test_wallet.py",
+    test_command="python3 -m unittest tests.test_wallet",
     files={
+        "tests/__init__.py": "# tests package\n",
         "wallet.py": """import asyncio
 
 class InsufficientFundsError(Exception):
@@ -158,8 +159,9 @@ SCENARIO_03_TRANSFORM = Scenario(
     title="Pipeline Schema Type Mismatch & Null Safety",
     difficulty="Medium",
     description="The data transformer crashes when encountered with missing fields or null values, and converts ISO timestamps inconsistently. Fix transformer.py so that tests/test_transformer.py passes.",
-    test_command="python3 -m unittest tests/test_transformer.py",
+    test_command="python3 -m unittest tests.test_transformer",
     files={
+        "tests/__init__.py": "# tests package\n",
         "transformer.py": """from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 

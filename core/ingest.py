@@ -83,7 +83,8 @@ class PackedRepo:
             block_tokens = len(block_str) // 4
 
             if current_tokens + block_tokens > max_token_budget:
-                lines.append(f"<!-- Truncated {len(self.files) - len(lines)} files due to budget -->")
+                remaining = len(self.files) - len([l for l in lines if l.startswith("<file path=")])
+                lines.append(f"<!-- Truncated ~{remaining} files due to budget -->")
                 break
 
             lines.append(block_str)

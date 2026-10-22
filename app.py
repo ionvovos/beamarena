@@ -249,9 +249,9 @@ with gr.Blocks(title="BeamArena — Autonomous Coding Gym") as demo:
             gr.Dataframe(
                 headers=["Scenario ID", "Domain", "Difficulty", "Turns to Green", "Reasoning Tokens", "Wall-Clock Time", "Result"],
                 value=[
-                    ["01_fastapi_auth", "Web Auth & JWT", "Easy", "2", "399", "2.31s", "✅ PASS@2"],
-                    ["02_async_wallet", "Concurrency & Locks", "Medium", "2", "512", "3.10s", "✅ PASS@2"],
-                    ["03_sql_transform", "Data Pipelines & Types", "Medium", "1", "280", "1.95s", "✅ PASS@1"],
+                    ["01_fastapi_auth", "Web Auth & JWT", "Easy", "1", "288", "1.90s", "✅ PASS@1"],
+                    ["02_async_wallet", "Concurrency & Locks", "Medium", "1", "433", "2.87s", "✅ PASS@1"],
+                    ["03_sql_transform", "Data Pipelines & Types", "Medium", "3", "2091", "8.33s", "✅ PASS@3"],
                 ],
                 interactive=False,
             )

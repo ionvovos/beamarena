@@ -111,7 +111,9 @@ class AutonomousCodingAgent:
             f"TEST COMMAND TO PASS:\n{test_command}\n\n"
             f"CURRENT WORKSPACE FILES:\n" + "\n".join(files_dump) + "\n\n"
             f"Analyze the codebase, identify the bug or missing implementation, "
-            f"generate the necessary <edit_file> patches, and run <run_command>{test_command}</run_command>."
+            f"FIRST output the corrected file(s) inside <edit_file path='...'>...</edit_file> blocks, "
+            f"THEN verify with <run_command>{test_command}</run_command>. "
+            f"Do not run tests before providing the edit."
         )
 
         messages.append({"role": "user", "content": initial_user_prompt})

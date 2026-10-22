@@ -6,6 +6,7 @@ against the isolated Sandbox environment.
 
 from dataclasses import dataclass
 import re
+import shlex
 from typing import List, Optional
 from .sandbox import ExecutionResult, Sandbox
 
@@ -103,7 +104,10 @@ class ToolExecutor:
         """Executes all bash commands sequentially inside the sandbox."""
         results = []
         for cmd_action in plan.commands:
-            parts = cmd_action.command.split()
+            try:
+                parts = shlex.split(cmd_action.command)
+            except ValueError:
+                parts = cmd_action.command.split()
             if not parts:
                 continue
             res = self.sandbox.run_command(parts, timeout_seconds=timeout)

@@ -47,16 +47,18 @@ try:
     with urllib.request.urlopen(req, context=ctx) as resp:
         res = json.loads(resp.read().decode("utf-8"))
 except Exception:
-    ctx = ssl._create_unverified_context()
-    with urllib.request.urlopen(req, context=ctx) as resp:
-        res = json.loads(resp.read().decode("utf-8"))
-        choice = res["choices"][0]["message"]
-        print("\n--- Reasoning Content (Chain of Thought) ---")
-        print(choice.get("reasoning_content", "(None)"))
-        print("\n--- Final Content ---")
-        print(choice.get("content", ""))
-        print("\n--- Token Usage ---")
-        print(json.dumps(res.get("usage", {}), indent=2))
-except Exception as e:
-    print(f"Error during request: {e}")
-    sys.exit(1)
+    try:
+        ctx = ssl._create_unverified_context()
+        with urllib.request.urlopen(req, context=ctx) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"Error during request: {e}")
+        sys.exit(1)
+
+choice = res["choices"][0]["message"]
+print("\n--- Reasoning Content (Chain of Thought) ---")
+print(choice.get("reasoning_content", "(None)"))
+print("\n--- Final Content ---")
+print(choice.get("content", ""))
+print("\n--- Token Usage ---")
+print(json.dumps(res.get("usage", {}), indent=2))
