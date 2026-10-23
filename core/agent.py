@@ -14,8 +14,10 @@ import os
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from .client import BeamClient, BeamResponse, TokenUsage
+from .ingest import RepoIngestor
 from .sandbox import ExecutionResult, Sandbox
 from .tools import ParsedPlan, ToolExecutor, ToolParser
+from .validator import TripleValidator, CertificationReport
 
 
 @dataclass
@@ -39,6 +41,7 @@ class AgentSessionTrace:
     total_tokens: int = 0
     total_reasoning_tokens: int = 0
     wall_clock_seconds: float = 0.0
+    certification: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Converts trace to JSON-serializable dictionary."""
@@ -49,6 +52,7 @@ class AgentSessionTrace:
             "total_tokens": self.total_tokens,
             "total_reasoning_tokens": self.total_reasoning_tokens,
             "wall_clock_seconds": self.wall_clock_seconds,
+            "certification": self.certification,
             "turns": [
                 {
                     "turn_index": t.turn_index,
@@ -139,25 +143,13 @@ class AutonomousCodingAgent:
             {"role": "system", "content": AGENT_SYSTEM_PROMPT}
         ]
 
-        # Initial prompt includes file inventory and user task
-        file_list = sandbox.list_files()
-        files_dump = []
-        for f in file_list:
-            if not f.startswith("."):
-                try:
-                    content = sandbox.read_file(f)
-                    files_dump.append(f"<file path='{f}'>\n{content}\n</file>")
-                except Exception:
-                    pass
-
-        initial_user_prompt = (
-            f"TASK DESCRIPTION:\n{task_description}\n\n"
-            f"TEST COMMAND TO PASS:\n{test_command}\n\n"
-            f"CURRENT WORKSPACE FILES:\n" + "\n".join(files_dump) + "\n\n"
-            f"Analyze the codebase, identify the bug or missing implementation, "
-            f"FIRST output the corrected file(s) inside <edit_file path='...'>...</edit_file> blocks, "
-            f"THEN verify with <run_command>{test_command}</run_command>. "
-            f"Do not run tests before providing the edit."
+        # Ingest sandbox workspace into structured AST architecture prompt
+        ingestor = RepoIngestor()
+        packed = ingestor.ingest_directory(sandbox.root)
+        initial_user_prompt = packed.render_agent_prompt(
+            task_description=task_description,
+            test_command=test_command,
+            max_token_budget=self.max_token_budget,
         )
 
         messages.append({"role": "user", "content": initial_user_prompt})
@@ -227,18 +219,43 @@ class AutonomousCodingAgent:
             if self.on_turn_complete:
                 self.on_turn_complete(turn)
 
-            # If passed, we are done!
+            # If tests pass, execute AIOS Triple Verification Gate
             if test_passed:
-                trace.resolved = True
+                validator = TripleValidator(sandbox)
+                all_edits = []
+                for t in trace.turns:
+                    for edit_log in t.edits_applied:
+                        if "edited file:" in edit_log:
+                            parts = edit_log.split("edited file:")[1].split("(")
+                            if parts:
+                                all_edits.append(parts[0].strip())
+                if not all_edits:
+                    all_edits = [f for f in sandbox.list_files() if not f.startswith("tests") and not f.startswith(".")]
+
+                cert = validator.certify(
+                    test_cmd=test_command,
+                    edited_files=all_edits,
+                    command_results=command_results,
+                )
+                trace.certification = cert.to_dict()
+                trace.resolved = cert.certified
+                yield ("certification", cert)
                 break
 
             # 6. If failed and we have turns left, formulate the RL feedback message
-            last_cmd_res = command_results[-1] if command_results else None
+            test_cmd_res = None
+            for cr in reversed(command_results):
+                if test_command in cr.command:
+                    test_cmd_res = cr
+                    break
+            if not test_cmd_res and command_results:
+                test_cmd_res = command_results[-1]
+
             failure_feedback = (
                 f"VERIFICATION FAILED for command '{test_command}'.\n"
-                f"Exit Code: {last_cmd_res.exit_code if last_cmd_res else -1}\n"
-                f"STDOUT:\n{last_cmd_res.stdout if last_cmd_res else ''}\n"
-                f"STDERR:\n{last_cmd_res.stderr if last_cmd_res else ''}\n\n"
+                f"Exit Code: {test_cmd_res.exit_code if test_cmd_res else -1}\n"
+                f"STDOUT:\n{test_cmd_res.stdout if test_cmd_res else ''}\n"
+                f"STDERR:\n{test_cmd_res.stderr if test_cmd_res else ''}\n\n"
                 f"Carefully analyze this traceback and error. What went wrong? "
                 f"Provide a revised <edit_file> patch and verify again with <run_command>{test_command}</run_command>."
             )
@@ -281,8 +298,13 @@ class AutonomousCodingAgent:
         return final_trace
 
     def _persist_trace(self, trace: AgentSessionTrace) -> None:
-        """Appends the execution trace to benchmarks/traces.jsonl."""
-        if not self.persist_trace or trace.scenario_id.startswith("mock_"):
+        """Appends the execution trace to benchmarks/traces.jsonl for benchmark scenarios."""
+        if (
+            not self.persist_trace
+            or trace.scenario_id.startswith("mock_")
+            or trace.scenario_id.startswith("custom")
+            or trace.scenario_id.startswith("local_")
+        ):
             return
         try:
             traces_dir = os.path.join(os.path.dirname(__file__), "..", "benchmarks")

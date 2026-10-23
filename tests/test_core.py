@@ -51,6 +51,45 @@ class TestCoreModules(unittest.TestCase):
         self.assertEqual(plan.commands[0].command, "pytest tests/test_auth.py")
         self.assertEqual(plan.thought_summary, "Fixed the token check.")
 
+    def test_scenario_aliases(self):
+        from scenarios import get_scenario
+        scen_08 = get_scenario("08_db_pool_leak")
+        self.assertIsNotNone(scen_08)
+        self.assertEqual(scen_08.id, "08_async_resource_db_pool_context_manager_leak_prevention")
+
+        scen_10 = get_scenario("10_memory_bounded_stream")
+        self.assertIsNotNone(scen_10)
+        self.assertEqual(scen_10.id, "10_memory_bounded_chunked_stream_pipeline")
+
+    def test_custom_workspace_parser_hardening(self):
+        from app import parse_custom_workspace
+        # Test standard separator comment does not produce empty filename
+        code = """# ====================
+# Just a comment separator
+def foo():
+    return 1
+# ===== mod/bar.py =====
+def bar():
+    return 2
+"""
+        files = parse_custom_workspace(code)
+        self.assertNotIn("", files)
+        self.assertIn("solution.py", files)
+        self.assertIn("mod/bar.py", files)
+        self.assertIn("def foo():", files["solution.py"])
+        self.assertIn("def bar():", files["mod/bar.py"])
+
+    def test_analyze_repo_path_confinement(self):
+        from app import analyze_repo_prompt
+        # Path outside project root should be denied
+        report, status = analyze_repo_prompt("/etc")
+        self.assertIn("Access denied", report)
+        self.assertEqual(status, "Access Denied")
+
+        report, status = analyze_repo_prompt("../../..")
+        self.assertIn("Access denied", report)
+        self.assertEqual(status, "Access Denied")
+
 
 if __name__ == "__main__":
     unittest.main()

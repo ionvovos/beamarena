@@ -12,7 +12,7 @@ from core.client import BeamClient
 from core.sandbox import Sandbox
 from core.agent import AutonomousCodingAgent
 from core.ingest import RepoIngestor
-from scenarios import ALL_SCENARIOS
+from scenarios import ALL_SCENARIOS, get_scenario
 
 
 def cmd_solve(args):
@@ -44,7 +44,7 @@ def cmd_solve(args):
 
         ingestor = RepoIngestor()
         packed = ingestor.ingest_directory(".")
-        file_map = {p: packed.raw_files[p] for p in packed.files if p in packed.raw_files}
+        file_map = {p: entry.content for p, entry in packed.files.items()}
 
         with Sandbox() as sb:
             sb.load_files(file_map)
@@ -64,7 +64,7 @@ def cmd_solve(args):
 
     # Benchmark scenario mode
     scen_id = args.scenario or "01_fastapi_auth"
-    scen = ALL_SCENARIOS.get(scen_id)
+    scen = get_scenario(scen_id)
     if not scen:
         print(f"Error: Unknown scenario '{scen_id}'. Available: {list(ALL_SCENARIOS.keys())}")
         sys.exit(1)

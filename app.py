@@ -14,7 +14,7 @@ from core.client import BeamClient
 from core.sandbox import Sandbox
 from core.agent import AutonomousCodingAgent, AGENT_SYSTEM_PROMPT
 from core.ingest import RepoIngestor
-from scenarios import ALL_SCENARIOS, Scenario
+from scenarios import ALL_SCENARIOS, Scenario, get_scenario
 
 # Retrieve API key from environment (or Space secrets)
 API_KEY = os.environ.get("REFLECTION_API_KEY", "")
@@ -37,14 +37,17 @@ def parse_custom_workspace(raw_text: str) -> Dict[str, str]:
     files = {}
     current_path = "solution.py"
     current_lines = []
+    import re
+    header_pattern = re.compile(r"^#\s*=====\s*([a-zA-Z0-9_\-\./\\]+)\s*=====$")
     for line in (raw_text or "").splitlines():
-        if line.startswith("# =====") and line.endswith("====="):
+        match = header_pattern.match(line.strip())
+        if match:
             if current_lines:
                 files[current_path] = "\n".join(current_lines)
                 current_lines = []
-            parts = line.split("=====")
-            if len(parts) >= 3:
-                current_path = parts[1].strip()
+            path = match.group(1).strip()
+            if path:
+                current_path = path
         else:
             current_lines.append(line)
     if current_lines:
@@ -80,7 +83,7 @@ if __name__ == "__main__":
         return desc, cmd, sample_code
 
     scen_id = selection.split(" — ")[0]
-    scen: Scenario = ALL_SCENARIOS.get(scen_id)
+    scen: Scenario = get_scenario(scen_id)
     if not scen:
         return "", "", ""
 
@@ -129,7 +132,7 @@ def run_autonomous_arena(
         files_to_load = parse_custom_workspace(custom_code)
     else:
         scen_id = scenario_selection.split(" — ")[0]
-        scen: Scenario = ALL_SCENARIOS.get(scen_id)
+        scen: Scenario = get_scenario(scen_id)
         if not scen:
             yield "Scenario not found.", "", "", "❌ Error"
             return
@@ -217,12 +220,21 @@ def analyze_repo_prompt(repo_path: str):
         repo_path = "."
 
     clean_path = repo_path.strip()
-    if not os.path.exists(clean_path):
+    project_root = os.path.realpath(os.path.dirname(__file__))
+    real_target = os.path.realpath(os.path.join(project_root, clean_path))
+
+    try:
+        if os.path.commonpath([real_target, project_root]) != project_root:
+            return "❌ Access denied: Inspection is restricted to subdirectories within the project workspace.", "Access Denied"
+    except ValueError:
+        return "❌ Access denied: Invalid path traversal attempted.", "Access Denied"
+
+    if not os.path.exists(real_target):
         return f"❌ Path does not exist: `{clean_path}`. Enter a valid directory path (e.g. `core`, `scenarios`, or `.`).", "Error"
 
     try:
         ingestor = RepoIngestor()
-        packed = ingestor.ingest_directory(clean_path)
+        packed = ingestor.ingest_directory(real_target)
 
         total_classes = sum(len([s for s in f.symbols if s.kind == "class"]) for f in packed.files.values())
         total_funcs = sum(len([s for s in f.symbols if s.kind == "function"]) for f in packed.files.values())

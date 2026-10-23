@@ -23,6 +23,15 @@ task_categories:
 - text-generation
 task_ids: []
 pretty_name: "BeamArena: 1M-Context Autonomous SWE Reasoning Benchmark"
+configs:
+- config_name: 1m_frontier_evals
+  data_files:
+  - split: train
+    path: swe_1m_frontier_evals.jsonl
+- config_name: swe_scenarios
+  data_files:
+  - split: train
+    path: swe_bench_10_scenarios.jsonl
 ---
 
 # ⚡ Beam-1M-SWE-Benchmark

@@ -15,12 +15,19 @@ def main():
     print("   Target: ion1111/beam-1m-swe-benchmark")
     print("=" * 70)
 
-    remote = os.popen("git remote get-url space").read().strip()
-    if "@" not in remote or "://" not in remote:
-        print("Error: Could not extract token from git remote space.")
+    token = os.environ.get("HF_TOKEN", "")
+    if not token:
+        remote = os.popen("git remote get-url space 2>/dev/null").read().strip()
+        if "@" in remote and "://" in remote:
+            try:
+                token = remote.split("://")[1].split("@")[0].split(":")[1]
+            except Exception:
+                pass
+
+    if not token:
+        print("Error: HF_TOKEN environment variable (or git remote 'space') is required.")
         sys.exit(1)
 
-    token = remote.split("://")[1].split("@")[0].split(":")[1]
     api = HfApi(token=token)
     repo_id = "ion1111/beam-1m-swe-benchmark"
 

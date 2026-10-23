@@ -444,3 +444,21 @@ ALL_SCENARIOS = {
     SCENARIO_10_PIPELINE.id: SCENARIO_10_PIPELINE,
 }
 
+SCENARIO_ALIASES = {
+    "08_db_pool_leak": "08_async_resource_db_pool_context_manager_leak_prevention",
+    "10_memory_bounded_stream": "10_memory_bounded_chunked_stream_pipeline",
+}
+
+
+def get_scenario(scen_id: str) -> Scenario:
+    """Resolves scenario by exact ID or common documentation alias."""
+    if not scen_id:
+        return None
+    if scen_id in ALL_SCENARIOS:
+        return ALL_SCENARIOS[scen_id]
+    alias_id = SCENARIO_ALIASES.get(scen_id)
+    if alias_id and alias_id in ALL_SCENARIOS:
+        return ALL_SCENARIOS[alias_id]
+    return None
+
+
